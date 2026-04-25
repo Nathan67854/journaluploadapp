@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HandScan — Handwriting to Text</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #f4f5f7;
+            --surface: #ffffff;
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --primary-light: rgba(79, 70, 229, 0.1);
+            --text: #111827;
+            --text-muted: #6b7280;
+            --border: #e5e7eb;
+            --success: #10b981;
+            --error: #ef4444;
+            --radius: 14px;
+            --shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.06);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100dvh;
+        }
+
+        .app {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+            padding-top: max(16px, env(safe-area-inset-top));
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* ── Header ── */
+        header { text-align: center; padding: 12px 0 4px; }
+        header h1 { font-size: 26px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; }
+        header p { color: var(--text-muted); font-size: 14px; margin-top: 3px; }
+
+        /* ── Card ── */
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 16px;
+            border: 1px solid var(--border);
+        }
+
+        /* ── API Key ── */
+        .api-key-section details summary {
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .api-key-section details summary::-webkit-details-marker { display: none; }
+        .api-key-section details summary::before { content: '⚙️'; font-size: 13px; }
+        .api-key-section details[open] summary { color: var(--text); }
+
+        .api-key-field { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+        .api-key-field label { font-size: 13px; font-weight: 600; color: var(--text); }
+        .api-key-field input {
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            padding: 11px 13px;
+            font-size: 14px;
+            font-family: 'Menlo', 'Courier New', monospace;
+            outline: none;
+            width: 100%;
+            color: var(--text);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            background: var(--bg);
+        }
+        .api-key-field input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+            background: var(--surface);
+        }
+        .api-key-field .hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+        .api-key-field .hint a { color: var(--primary); text-decoration: none; font-weight: 500; }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 11px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.14s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:not(:disabled):hover { background: var(--primary-dark); }
+        .btn-secondary { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+        .btn-secondary:not(:disabled):hover { background: #e9eaec; }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-success:not(:disabled):hover { background: #059669; }
+        .btn-full { width: 100%; }
+        .btn-icon { font-size: 19px; line-height: 1; }
+
+        input[type="file"] { display: none; }
+
+        /* ── Capture buttons ── */
+        .capture-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .capture-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 18px 12px;
+            border-radius: 11px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.14s;
+            -webkit-tap-highlight-color: transparent;
+            border: none;
+        }
+        .capture-btn:active { transform: scale(0.96); }
+        .capture-btn-camera { background: var(--primary); color: #fff; }
+        .capture-btn-camera:hover { background: var(--primary-dark); }
+        .capture-btn-upload { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+        .capture-btn-upload:hover { background: #e9eaec; }
+        .capture-btn-icon { font-size: 22px; line-height: 1; }
+
+        /* ── Voice button ── */
+        .capture-btn-voice {
+            margin-top: 12px;
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1.5px solid #bbf7d0;
+        }
+        .capture-btn-voice:hover { background: #dcfce7; }
+
+        /* ── Recording state ── */
+        .recording-state { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0 4px; }
+        .rec-indicator { display: flex; align-items: center; gap: 8px; }
+        .rec-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #ef4444;
+            animation: pulse-dot 1.1s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%       { opacity: 0.4; transform: scale(0.85); }
+        }
+        .rec-label { font-weight: 700; font-size: 15px; color: #ef4444; }
+        .rec-timer { font-size: 42px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); letter-spacing: -1px; }
+        .rec-hint  { font-size: 13px; color: var(--text-muted); }
+
+        /* ── Camera Modal ── */
+        .camera-modal {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: max(16px, env(safe-area-inset-top)) 0 max(24px, env(safe-area-inset-bottom));
+        }
+
+        .camera-modal.hidden { display: none !important; }
+
+        .camera-topbar {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+
+        .camera-close {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.14s;
+        }
+        .camera-close:hover { background: rgba(255,255,255,0.25); }
+
+        .camera-flip {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.14s;
+        }
+        .camera-flip:hover { background: rgba(255,255,255,0.25); }
+        .camera-flip:active { transform: rotate(180deg); }
+
+        .camera-viewfinder {
+            flex: 1;
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            margin: 12px 0;
+        }
+
+        #camera-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .camera-error {
+            color: #fff;
+            text-align: center;
+            padding: 24px;
+            font-size: 15px;
+            line-height: 1.6;
+            opacity: 0.85;
+        }
+
+        .camera-bottombar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 0 20px;
+            position: relative;
+        }
+
+        .camera-shutter {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: #fff;
+            border: 4px solid rgba(255,255,255,0.4);
+            cursor: pointer;
+            transition: transform 0.1s, background 0.1s;
+            -webkit-tap-highlight-color: transparent;
+            outline: 3px solid rgba(255,255,255,0.6);
+            outline-offset: 4px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+        .camera-shutter:active { transform: scale(0.9); background: #e0e0e0; }
+
+        /* hidden canvas for snapshot */
+        #snapshot-canvas { display: none; }
+
+        /* ── Preview ── */
+        .preview-wrapper {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #1a1a2e;
+            min-height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #preview-img { width: 100%; max-height: 340px; object-fit: contain; display: block; }
+        .preview-clear {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 34px;
+            height: 34px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.14s;
+        }
+        .preview-clear:hover { background: rgba(0,0,0,0.75); }
+
+        /* ── Loading ── */
+        .loading-state { display: flex; flex-direction: column; align-items: center; padding: 28px 0 20px; gap: 14px; }
+        .spinner { width: 42px; height: 42px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.75s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-state p { color: var(--text-muted); font-size: 15px; }
+
+        /* ── Error ── */
+        .error-state {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 11px;
+            padding: 14px;
+            color: var(--error);
+            font-size: 14px;
+            display: flex;
+            gap: 9px;
+            align-items: flex-start;
+            line-height: 1.5;
+        }
+
+        /* ── Result ── */
+        .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .result-header h2 { font-size: 15px; font-weight: 700; }
+        .result-count { font-size: 12px; color: var(--text-muted); background: var(--bg); padding: 3px 8px; border-radius: 20px; border: 1px solid var(--border); }
+        .result-textarea {
+            width: 100%;
+            min-height: 200px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 13px;
+            font-size: 15px;
+            font-family: inherit;
+            line-height: 1.65;
+            resize: vertical;
+            outline: none;
+            color: var(--text);
+            background: var(--bg);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            margin-bottom: 12px;
+        }
+        .result-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); background: var(--surface); }
+        .result-actions { display: flex; flex-direction: column; gap: 10px; }
+        .copy-feedback { text-align: center; font-size: 13px; font-weight: 500; color: var(--success); height: 18px; opacity: 0; transition: opacity 0.25s; }
+        .copy-feedback.show { opacity: 1; }
+
+        /* ── Utility ── */
+        .hidden { display: none !important; }
+
+        footer { text-align: center; padding: 4px 0 8px; color: var(--text-muted); font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <!-- Camera Modal (fullscreen overlay) -->
+    <div id="camera-modal" class="camera-modal hidden">
+        <div class="camera-topbar">
+            <button class="camera-close" id="camera-close" aria-label="Close camera">✕</button>
+            <button class="camera-flip" id="camera-flip" aria-label="Flip camera">🔄</button>
+        </div>
+        <div class="camera-viewfinder">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <div id="camera-error-msg" class="camera-error hidden"></div>
+        </div>
+        <div class="camera-bottombar">
+            <button class="camera-shutter" id="camera-shutter" aria-label="Take photo"></button>
+        </div>
+        <canvas id="snapshot-canvas"></canvas>
+    </div>
+
+    <div class="app">
+        <header>
+            <h1>✍️ HandScan</h1>
+            <p>Handwritten notes → copyable text</p>
+        </header>
+
+        <!-- API Key -->
+        <div class="card api-key-section">
+            <details id="api-key-details">
+                <summary>API Settings</summary>
+                <div class="api-key-field">
+                    <label for="api-key-input">Google Gemini API Key</label>
+                    <input type="password" id="api-key-input" placeholder="AIzaSy…" autocomplete="off" spellcheck="false">
+                    <p class="hint">
+                        Get a free key at
+                        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a>.
+                        Saved only in this browser.
+                    </p>
+                </div>
+            </details>
+        </div>
+
+        <!-- Capture -->
+        <div id="capture-section" class="card">
+            <div class="capture-buttons">
+                <button class="capture-btn capture-btn-camera" id="open-camera-btn">
+                    <span class="capture-btn-icon">📷</span> Camera
+                </button>
+                <label class="capture-btn capture-btn-upload" for="upload-input">
+                    <span class="capture-btn-icon">🖼️</span> Upload
+                </label>
+            </div>
+            <input type="file" id="upload-input" accept="image/*">
+            <button class="capture-btn capture-btn-voice btn-full" id="open-voice-btn">
+                <span class="capture-btn-icon">🎙</span> Record Voice
+            </button>
+        </div>
+
+        <!-- Preview -->
+        <div id="preview-section" class="card hidden" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="preview-wrapper">
+                <img id="preview-img" alt="Selected image">
+                <button class="preview-clear" id="clear-btn" aria-label="Remove image">✕</button>
+            </div>
+            <button id="convert-btn" class="btn btn-primary btn-full">
+                <span class="btn-icon">✨</span> Convert to Text
+            </button>
+        </div>
+
+        <!-- Recording -->
+        <div id="recording-section" class="card hidden">
+            <div class="recording-state">
+                <div class="rec-indicator">
+                    <span class="rec-dot"></span>
+                    <span class="rec-label">Recording</span>
+                </div>
+                <div class="rec-timer" id="rec-timer">00:00</div>
+                <p class="rec-hint">Speak clearly — tap Stop when done</p>
+                <button class="btn btn-full" id="stop-recording-btn" style="background:#ef4444;color:#fff;">
+                    ⏹ Stop
+                </button>
+                <button class="btn btn-secondary btn-full" id="cancel-recording-btn">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading-section" class="card hidden">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Reading your handwriting…</p>
+            </div>
+        </div>
+
+        <!-- Error -->
+        <div id="error-section" class="error-state hidden">
+            <span>⚠️</span>
+            <span id="error-message"></span>
+        </div>
+
+        <!-- Result -->
+        <div id="result-section" class="card hidden">
+            <div class="result-header">
+                <h2>Converted Text</h2>
+                <span class="result-count" id="char-count"></span>
+            </div>
+            <textarea class="result-textarea" id="result-text" spellcheck="false" aria-label="Converted text"></textarea>
+            <div class="result-actions">
+                <button class="btn btn-success btn-full" id="copy-btn">
+                    <span class="btn-icon" id="copy-icon">📋</span> Copy to Clipboard
+                </button>
+                <p class="copy-feedback" id="copy-feedback">Copied to clipboard!</p>
+                <button class="btn btn-secondary btn-full" id="new-btn">Convert Another</button>
+            </div>
+        </div>
+
+        <footer>Powered by Google Gemini 2.0</footer>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'handscan_gemini_key';
+        const $ = id => document.getElementById(id);
+
+        // Elements
+        const apiKeyInput    = $('api-key-input');
+        const apiKeyDetails  = $('api-key-details');
+        const uploadInput    = $('upload-input');
+        const captureSection = $('capture-section');
+        const previewSection = $('preview-section');
+        const previewImg     = $('preview-img');
+        const clearBtn       = $('clear-btn');
+        const convertBtn     = $('convert-btn');
+        const loadingSection = $('loading-section');
+        const errorSection   = $('error-section');
+        const errorMessage   = $('error-message');
+        const resultSection  = $('result-section');
+        const resultText     = $('result-text');
+        const charCount      = $('char-count');
+        const copyBtn        = $('copy-btn');
+        const copyIcon       = $('copy-icon');
+        const copyFeedback   = $('copy-feedback');
+        const newBtn         = $('new-btn');
+
+        // Camera elements
+        const openCameraBtn   = $('open-camera-btn');
+        const cameraModal     = $('camera-modal');
+        const cameraVideo     = $('camera-video');
+        const cameraClose     = $('camera-close');
+        const cameraFlip      = $('camera-flip');
+        const cameraShutter   = $('camera-shutter');
+        const cameraErrorMsg  = $('camera-error-msg');
+        const snapshotCanvas  = $('snapshot-canvas');
+
+        // Voice recording elements
+        const openVoiceBtn       = $('open-voice-btn');
+        const recordingSection   = $('recording-section');
+        const recTimer           = $('rec-timer');
+        const stopRecordingBtn   = $('stop-recording-btn');
+        const cancelRecordingBtn = $('cancel-recording-btn');
+
+        let imageBase64 = null;
+        let imageMime   = null;
+        let cameraStream     = null;
+        let facingMode       = 'environment';
+        let mediaRecorder    = null;
+        let audioChunks      = [];
+        let recordingTimerId = null;
+        let recordingSeconds = 0;
+
+        // ── API key ──────────────────────────────────────────────
+        const savedKey = localStorage.getItem(STORAGE_KEY);
+        if (savedKey) {
+            apiKeyInput.value = savedKey;
+        } else {
+            apiKeyDetails.open = true;
+        }
+        apiKeyInput.addEventListener('change', () => {
+            const v = apiKeyInput.value.trim();
+            if (v) localStorage.setItem(STORAGE_KEY, v);
+            else   localStorage.removeItem(STORAGE_KEY);
+        });
+
+        // ── Camera ───────────────────────────────────────────────
+        openCameraBtn.addEventListener('click', () => openCamera());
+
+        async function openCamera(facing = facingMode) {
+            facingMode = facing;
+            hide(cameraErrorMsg);
+            show(cameraModal);
+
+            // Stop any existing stream first
+            stopStream();
+
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false
+                });
+                cameraVideo.srcObject = cameraStream;
+            } catch (err) {
+                cameraVideo.srcObject = null;
+                cameraErrorMsg.textContent = err.name === 'NotAllowedError'
+                    ? 'Camera permission denied. Please allow camera access and try again.'
+                    : `Could not access camera: ${err.message}`;
+                show(cameraErrorMsg);
+            }
+        }
+
+        cameraFlip.addEventListener('click', () => {
+            openCamera(facingMode === 'environment' ? 'user' : 'environment');
+        });
+
+        cameraClose.addEventListener('click', closeCamera);
+
+        function closeCamera() {
+            stopStream();
+            hide(cameraModal);
+        }
+
+        function stopStream() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+            cameraVideo.srcObject = null;
+        }
+
+        // ── Shutter — capture frame ───────────────────────────────
+        cameraShutter.addEventListener('click', () => {
+            if (!cameraStream) return;
+
+            const video = cameraVideo;
+            const canvas = snapshotCanvas;
+            canvas.width  = video.videoWidth  || 1280;
+            canvas.height = video.videoHeight || 720;
+
+            const ctx = canvas.getContext('2d');
+
+            // Mirror if using front camera so the snapshot isn't flipped
+            if (facingMode === 'user') {
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+            const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+            if (!match) return;
+
+            imageMime   = match[1];
+            imageBase64 = match[2];
+
+            previewImg.src = dataUrl;
+            closeCamera();
+            show(previewSection);
+            hide(captureSection);
+            hide(errorSection);
+            hide(resultSection);
+            hide(loadingSection);
+        });
+
+        // ── File upload ──────────────────────────────────────────
+        uploadInput.addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                const dataUrl = e.target.result;
+                const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+                if (!match) return;
+                imageMime   = match[1];
+                imageBase64 = match[2];
+                previewImg.src = dataUrl;
+                show(previewSection);
+                hide(captureSection);
+                hide(errorSection);
+                hide(resultSection);
+                hide(loadingSection);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // ── Voice recording ──────────────────────────────────────
+        openVoiceBtn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                showError('Please enter your Gemini API key in the settings above.');
+                apiKeyDetails.open = true;
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.start(250);
+
+                recordingSeconds = 0;
+                recTimer.textContent = '00:00';
+                recordingTimerId = setInterval(() => {
+                    recordingSeconds++;
+                    const m = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+                    const s = String(recordingSeconds % 60).padStart(2, '0');
+                    recTimer.textContent = `${m}:${s}`;
+                }, 1000);
+
+                hide(captureSection);
+                hide(errorSection);
+                show(recordingSection);
+            } catch (err) {
+                showError(err.name === 'NotAllowedError'
+                    ? 'Microphone permission denied. Please allow mic access and try again.'
+                    : `Could not access microphone: ${err.message}`);
+            }
+        });
+
+        stopRecordingBtn.addEventListener('click', () => stopRecording(true));
+        cancelRecordingBtn.addEventListener('click', () => stopRecording(false));
+
+        function stopRecording(shouldTranscribe) {
+            clearInterval(recordingTimerId);
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+
+            mediaRecorder.onstop = async () => {
+                mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                hide(recordingSection);
+
+                if (!shouldTranscribe) { show(captureSection); return; }
+
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                const blob = new Blob(audioChunks, { type: mimeType });
+
+                const reader = new FileReader();
+                reader.onload = async e => {
+                    const match = e.target.result.match(/^data:([^;]+);base64,(.+)$/);
+                    if (!match) { showError('Could not read audio data.'); show(captureSection); return; }
+
+                    show(loadingSection);
+                    loadingSection.querySelector('p').textContent = 'Transcribing your recording…';
+                    try {
+                        const text = await callGemini(apiKeyInput.value.trim(), match[2], match[1], 'audio');
+                        hide(loadingSection);
+                        resultText.value = text;
+                        updateCharCount(text);
+                        show(resultSection);
+                    } catch (err) {
+                        hide(loadingSection);
+                        show(captureSection);
+                        showError(err.message || 'Transcription failed. Please try again.');
+                    } finally {
+                        loadingSection.querySelector('p').textContent = 'Reading your handwriting…';
+                    }
+                };
+                reader.readAsDataURL(blob);
+            };
+            mediaRecorder.stop();
+        }
+
+        // ── Reset ────────────────────────────────────────────────
+        function reset() {
+            imageBase64 = null;
+            imageMime   = null;
+            previewImg.src = '';
+            uploadInput.value = '';
+            hide(previewSection);
+            hide(loadingSection);
+            hide(errorSection);
+            hide(resultSection);
+            show(captureSection);
+        }
+        clearBtn.addEventListener('click', reset);
+        newBtn.addEventListener('click', reset);
+
+        // ── Convert ──────────────────────────────────────────────
+        convertBtn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                showError('Please enter your Gemini API key in the settings above.');
+                apiKeyDetails.open = true;
+                return;
+            }
+            if (!imageBase64) { showError('No image selected.'); return; }
+
+            hide(previewSection);
+            hide(errorSection);
+            hide(resultSection);
+            show(loadingSection);
+
+            try {
+                const text = await callGemini(apiKey, imageBase64, imageMime);
+                hide(loadingSection);
+                resultText.value = text;
+                updateCharCount(text);
+                show(resultSection);
+            } catch (err) {
+                hide(loadingSection);
+                show(previewSection);
+                showError(err.message || 'Something went wrong. Please try again.');
+            }
+        });
+
+        async function callGemini(apiKey, base64, mimeType, mode = 'image') {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const prompt = mode === 'audio'
+                ? 'Transcribe this audio recording. The person is dictating a journal entry. Transcribe exactly what is said, using natural paragraph breaks for longer pauses. Return only the transcribed text — no labels, timestamps, or commentary.'
+                : 'Transcribe all handwritten text in this image exactly as written. Preserve line breaks, indentation, and formatting as closely as possible. Return only the transcribed text — no extra commentary, labels, or explanations.';
+            const body = {
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType, data: base64 } }
+                    ]
+                }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+            };
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error?.message || `API error (${res.status})`);
+            }
+
+            const data = await res.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (!text) throw new Error('No text could be extracted. Make sure the image contains readable handwriting.');
+            return text;
+        }
+
+        // ── Copy ─────────────────────────────────────────────────
+        copyBtn.addEventListener('click', async () => {
+            const text = resultText.value;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+            } catch {
+                resultText.select();
+                document.execCommand('copy');
+            }
+            copyIcon.textContent = '✅';
+            copyFeedback.classList.add('show');
+            setTimeout(() => {
+                copyIcon.textContent = '📋';
+                copyFeedback.classList.remove('show');
+            }, 2200);
+        });
+
+        resultText.addEventListener('input', () => updateCharCount(resultText.value));
+
+        // ── Helpers ──────────────────────────────────────────────
+        function show(el) { el.classList.remove('hidden'); }
+        function hide(el) { el.classList.add('hidden'); }
+        function showError(msg) { errorMessage.textContent = msg; show(errorSection); }
+        function updateCharCount(text) {
+            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+            charCount.textContent = `${words} word${words !== 1 ? 's' : ''}`;
+        }
+    </script>
+</body>
+</html>

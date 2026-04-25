@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="https://unpkg.com/streamlit-component-lib/dist/streamlit-component-lib.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: transparent;
+    font-family: Georgia, serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0 12px 0;
+  }
+  #status {
+    color: #7a5c3a;
+    font-size: 14px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  #waveform {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 60px;
+    margin-bottom: 20px;
+  }
+  .bar {
+    width: 5px;
+    background: #d9c3a8;
+    border-radius: 3px;
+    height: 6px;
+  }
+  #mic-btn {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: none;
+    background: #c8956c;
+    color: white;
+    font-size: 26px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.1s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  #mic-btn:hover { background: #b07d55; transform: scale(1.05); }
+  #mic-btn.recording { background: #c0392b; animation: pulse 1.2s infinite; }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(192,57,43,0.4); }
+    70%  { box-shadow: 0 0 0 14px rgba(192,57,43,0); }
+    100% { box-shadow: 0 0 0 0 rgba(192,57,43,0); }
+  }
+  #done-msg {
+    color: #4a3728;
+    font-size: 13px;
+    margin-top: 14px;
+    min-height: 18px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="status">Press the mic to start recording</div>
+
+<div id="waveform"></div>
+
+<button id="mic-btn">🎙️</button>
+
+<div id="done-msg"></div>
+
+<script>
+  const waveform = document.getElementById('waveform');
+  const NUM_BARS = 24;
+  for (let i = 0; i < NUM_BARS; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    waveform.appendChild(bar);
+  }
+  const bars = document.querySelectorAll('.bar');
+  const btn = document.getElementById('mic-btn');
+  const status = document.getElementById('status');
+  const doneMsg = document.getElementById('done-msg');
+
+  let mediaRecorder, audioCtx, analyser, source, rafId;
+  let chunks = [];
+  let recording = false;
+
+  function animateBars() {
+    if (!analyser) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    const step = Math.floor(data.length / NUM_BARS);
+    bars.forEach((bar, i) => {
+      const val = data[i * step] / 255;
+      bar.style.height = Math.max(4, Math.round(val * 55)) + 'px';
+      bar.style.background = '#c8956c';
+    });
+    rafId = requestAnimationFrame(animateBars);
+  }
+
+  function resetBars() {
+    bars.forEach(bar => {
+      bar.style.height = '6px';
+      bar.style.background = '#d9c3a8';
+    });
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!recording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioCtx = new AudioContext();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        mediaRecorder = new MediaRecorder(stream);
+        chunks = [];
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'audio/wav' });
+          const reader = new FileReader();
+          reader.onload = () => {
+            Streamlit.setComponentValue(reader.result.split(',')[1]);
+            doneMsg.textContent = '✅ Recording captured — click Transcribe below';
+            Streamlit.setFrameHeight(document.body.scrollHeight + 16);
+          };
+          reader.readAsDataURL(blob);
+          stream.getTracks().forEach(t => t.stop());
+          audioCtx.close();
+          cancelAnimationFrame(rafId);
+          resetBars();
+        };
+
+        mediaRecorder.start();
+        recording = true;
+        btn.classList.add('recording');
+        btn.innerHTML = '⏹️';
+        status.textContent = 'Recording… press to stop';
+        animateBars();
+      } catch (err) {
+        status.textContent = 'Microphone access denied — check browser permissions.';
+      }
+    } else {
+      mediaRecorder.stop();
+      recording = false;
+      btn.classList.remove('recording');
+      btn.innerHTML = '🎙️';
+      status.textContent = 'Press the mic to start recording';
+    }
+  });
+
+  window.addEventListener('load', () => {
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(document.body.scrollHeight + 16);
+  });
+</script>
+</body>
+</html>
