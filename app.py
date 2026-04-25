@@ -250,8 +250,14 @@ def transcribe_with_groq(audio_file, api_key: str) -> str:
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 
+def get_default_key() -> str:
+    try:
+        return st.secrets["GROQ_API_KEY"]
+    except Exception:
+        return load_saved_key()
+
 if "groq_key" not in st.session_state:
-    st.session_state["groq_key"] = load_saved_key()
+    st.session_state["groq_key"] = get_default_key()
 
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
