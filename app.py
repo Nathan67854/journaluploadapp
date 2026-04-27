@@ -1,5 +1,7 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import base64
+import json
 import os
 import io
 import requests
@@ -429,8 +431,19 @@ if "result" in st.session_state:
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
-        escaped = result.replace('`', '\\`').replace('\\', '\\\\')
-        st.markdown(f"""<button onclick="navigator.clipboard.writeText(`{escaped}`).then(()=>{{this.innerText='✅ Copied!';setTimeout(()=>this.innerText='📋 Copy to Clipboard',2000)}})" style="background:#A0522D;color:#fff;border:none;border-radius:999px;font-weight:500;font-size:13.5px;padding:0.45rem 1.6rem;letter-spacing:0.03em;box-shadow:0 2px 8px rgba(160,82,45,0.28);cursor:pointer;font-family:DM Sans,system-ui,sans-serif;">📋 Copy to Clipboard</button>""", unsafe_allow_html=True)
+        components.html(f"""
+        <script>
+        function doCopy() {{
+            var text = {json.dumps(result)};
+            var btn = document.getElementById('cb');
+            navigator.clipboard.writeText(text).then(function() {{
+                btn.innerText = '✅ Copied!';
+                setTimeout(function() {{ btn.innerText = '📋 Copy to Clipboard'; }}, 2000);
+            }});
+        }}
+        </script>
+        <button id="cb" onclick="doCopy()" style="background:#A0522D;color:#fff;border:none;border-radius:999px;font-weight:500;font-size:13.5px;padding:8px 24px;cursor:pointer;font-family:DM Sans,system-ui,sans-serif;box-shadow:0 2px 8px rgba(160,82,45,0.28);">📋 Copy to Clipboard</button>
+        """, height=50)
 
     with col2:
         st.button("🪨 Save to Obsidian", disabled=True, help="Coming soon")
