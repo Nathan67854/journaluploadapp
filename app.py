@@ -281,28 +281,35 @@ with tab_photo:
         st.session_state["photo_queue"] = []
 
     image_bytes = None
+    image_bytes_list = []
     if photo_source == "📷 Camera":
         camera_img = st.camera_input("Point camera at your journal entry")
         if camera_img:
             image_bytes = camera_img.getvalue()
     else:
-        img_file = st.file_uploader(
-            "Upload a photo of your handwritten notes",
+        img_files = st.file_uploader(
+            "Upload photos of your handwritten notes",
             type=["jpg", "jpeg", "png", "webp"],
             key="img_uploader",
+            accept_multiple_files=True,
         )
-        if img_file:
-            image_bytes = img_file.getvalue()
+        if img_files:
+            image_bytes_list = [f.getvalue() for f in img_files]
+            image_bytes = image_bytes_list[0] if len(image_bytes_list) == 1 else None
 
-    if image_bytes:
+    pending = image_bytes_list if image_bytes_list else ([image_bytes] if image_bytes else [])
+    if pending:
         col_a, col_b = st.columns([2, 1])
         with col_a:
-            st.markdown('<span style="background:#E4EDE6;color:#4E7C59;border-radius:999px;padding:5px 16px;font-size:13px;font-family:DM Sans,system-ui,sans-serif;display:inline-block;line-height:1.6;">✅ Photo ready</span>', unsafe_allow_html=True)
+            count = len(pending)
+            label = f"✅ {count} photo{'s' if count > 1 else ''} ready"
+            st.markdown(f'<span style="background:#E4EDE6;color:#4E7C59;border-radius:999px;padding:5px 16px;font-size:13px;font-family:DM Sans,system-ui,sans-serif;display:inline-block;line-height:1.6;">{label}</span>', unsafe_allow_html=True)
         with col_b:
             if st.button("➕ Add to queue", key="add_photo_queue_btn"):
                 queue = st.session_state["photo_queue"]
-                if not queue or image_bytes != queue[-1]:
-                    queue.append(image_bytes)
+                for item in pending:
+                    if item not in queue:
+                        queue.append(item)
                 st.rerun()
 
     photo_queue = st.session_state["photo_queue"]
@@ -315,13 +322,13 @@ with tab_photo:
                 st.session_state["photo_queue"] = []
                 st.rerun()
 
-    if (image_bytes or photo_queue) and st.button("Extract Text", key="ocr_btn"):
+    if (pending or photo_queue) and st.button("Extract Text", key="ocr_btn"):
         api_key = st.session_state.get("groq_key", "")
         if not api_key:
             st.error("Enter your Groq API key in the sidebar first.")
         else:
             try:
-                items = photo_queue if photo_queue else [image_bytes]
+                items = photo_queue if photo_queue else pending
                 all_text = []
                 for i, img_bytes in enumerate(items):
                     with st.spinner(f"Reading handwriting{f' {i+1} of {len(items)}' if len(items) > 1 else ''}…"):
