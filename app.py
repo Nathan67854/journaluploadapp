@@ -4,7 +4,6 @@ import os
 import io
 import requests
 from PIL import Image
-import pyperclip
 
 st.set_page_config(page_title="Journal Intake", layout="centered")
 
@@ -430,9 +429,8 @@ if "result" in st.session_state:
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
-        if st.button("📋 Copy to Clipboard"):
-            pyperclip.copy(result)
-            st.markdown('<span style="background:#E4EDE6;color:#4E7C59;border-radius:999px;padding:5px 16px;font-size:13px;font-family:DM Sans,system-ui,sans-serif;display:inline-block;line-height:1.6;">✅ Copied!</span>', unsafe_allow_html=True)
+        escaped = result.replace('`', '\\`').replace('\\', '\\\\')
+        st.markdown(f"""<button onclick="navigator.clipboard.writeText(`{escaped}`).then(()=>{{this.innerText='✅ Copied!';setTimeout(()=>this.innerText='📋 Copy to Clipboard',2000)}})" style="background:#A0522D;color:#fff;border:none;border-radius:999px;font-weight:500;font-size:13.5px;padding:0.45rem 1.6rem;letter-spacing:0.03em;box-shadow:0 2px 8px rgba(160,82,45,0.28);cursor:pointer;font-family:DM Sans,system-ui,sans-serif;">📋 Copy to Clipboard</button>""", unsafe_allow_html=True)
 
     with col2:
         st.button("🪨 Save to Obsidian", disabled=True, help="Coming soon")
