@@ -277,6 +277,9 @@ tab_photo, tab_voice = st.tabs(["📷 Photo", "🎙️ Voice"])
 with tab_photo:
     photo_source = st.radio("Source", ["📷 Camera", "⬆️ Upload"], horizontal=True, key="photo_source")
 
+    if "photo_queue" not in st.session_state:
+        st.session_state["photo_queue"] = []
+
     image_bytes = None
     if photo_source == "📷 Camera":
         camera_img = st.camera_input("Point camera at your journal entry")
@@ -291,14 +294,42 @@ with tab_photo:
         if img_file:
             image_bytes = img_file.getvalue()
 
-    if image_bytes and st.button("Extract Text", key="ocr_btn"):
+    if image_bytes:
+        col_a, col_b = st.columns([2, 1])
+        with col_a:
+            st.markdown('<span style="background:#E4EDE6;color:#4E7C59;border-radius:999px;padding:5px 16px;font-size:13px;font-family:DM Sans,system-ui,sans-serif;display:inline-block;line-height:1.6;">✅ Photo ready</span>', unsafe_allow_html=True)
+        with col_b:
+            if st.button("➕ Add to queue", key="add_photo_queue_btn"):
+                queue = st.session_state["photo_queue"]
+                if not queue or image_bytes != queue[-1]:
+                    queue.append(image_bytes)
+                st.rerun()
+
+    photo_queue = st.session_state["photo_queue"]
+    if photo_queue:
+        col_q, col_clear = st.columns([3, 1])
+        with col_q:
+            st.info(f"📷 {len(photo_queue)} photo{'s' if len(photo_queue) > 1 else ''} queued")
+        with col_clear:
+            if st.button("🗑️ Clear", key="clear_photo_queue_btn"):
+                st.session_state["photo_queue"] = []
+                st.rerun()
+
+    if (image_bytes or photo_queue) and st.button("Extract Text", key="ocr_btn"):
         api_key = st.session_state.get("groq_key", "")
         if not api_key:
             st.error("Enter your Groq API key in the sidebar first.")
         else:
             try:
-                with st.spinner("Reading handwriting…"):
-                    st.session_state["result"] = ocr_with_groq(image_bytes, api_key)
+                items = photo_queue if photo_queue else [image_bytes]
+                all_text = []
+                for i, img_bytes in enumerate(items):
+                    with st.spinner(f"Reading handwriting{f' {i+1} of {len(items)}' if len(items) > 1 else ''}…"):
+                        all_text.append(ocr_with_groq(img_bytes, api_key))
+                new_text = "\n".join(all_text)
+                existing = st.session_state.get("result", "")
+                st.session_state["result"] = (existing + "\n\n" + new_text).strip()
+                st.session_state["photo_queue"] = []
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
