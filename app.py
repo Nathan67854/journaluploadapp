@@ -3,7 +3,7 @@ import base64
 import os
 import io
 import requests
-from PIL import Image
+from PIL import Image, ImageOps
 
 st.set_page_config(page_title="Journal Intake", layout="centered")
 
@@ -199,7 +199,7 @@ def save_key(key: str):
 
 
 def to_jpeg_bytes(image_bytes: bytes) -> bytes:
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes))).convert("RGB")
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=90)
     return buf.getvalue()
